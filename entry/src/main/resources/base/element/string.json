@@ -11,6 +11,26 @@
     {
       "name": "EntryAbility_label",
       "value": "label"
+    },
+    {
+      "name": "activity_motion_permission_reason",
+      "value": "Monitor user activity status and motion data"
+    },
+    {
+      "name": "notification_permission_reason",
+      "value": "Manage application notification display and interaction"
+    },
+    {
+      "name": "vibrate_permission_reason",
+      "value": "Provide haptic feedback and vibration alerts"
+    },
+    {
+      "name": "background_permission_reason",
+      "value": "Run continuously in the background to provide services"
+    },
+    {
+      "name": "database_permission_reason",
+      "value": "Access local database storage for step tracking data"
     }
   ]
 }
