@@ -51,6 +51,10 @@ export default class EntryAbility extends UIAbility {
   onBackground(): void {
     // Ability has back to background
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onBackground');
+    
+    // 应用进入后台时，后台长时任务会自动保持运行
+    // 确保步数传感器能够持续获取数据
+    hilog.info(DOMAIN, 'testTag', 'Application moved to background, background task will keep running');
   }
 
   /**
@@ -79,3 +83,26 @@ export default class EntryAbility extends UIAbility {
     }
   }
 }
+
+/**
+ * EntryAbility 后台长时任务支持说明：
+ * 
+ * 1. 权限配置：
+ *    - 已在 module.json5 中声明 ohos.permission.KEEP_BACKGROUND_RUNNING 权限
+ *    - 用户需要授权该权限才能启用后台长时任务
+ * 
+ * 2. 后台任务生命周期：
+ *    - 在 StepViewModel.startTracking() 中启动后台任务
+ *    - 在 StepViewModel.stopTracking() 中停止后台任务
+ *    - EntryAbility 负责提供应用上下文，无需直接管理后台任务
+ * 
+ * 3. 后台状态处理：
+ *    - onBackground(): 应用进入后台，后台任务继续运行
+ *    - onForeground(): 应用回到前台，后台任务状态不变
+ *    - onDestroy(): 应用销毁，所有后台任务自动停止
+ * 
+ * 4. 注意事项：
+ *    - 后台长时任务由系统智能管理，可能会根据资源使用情况被限制
+ *    - DATA_TRANSFER 模式适用于持续数据传输场景
+ *    - 实际设备上需要用户明确授权后台运行权限
+ */
