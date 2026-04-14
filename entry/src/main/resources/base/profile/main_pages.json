@@ -1,6 +1,10 @@
 {
   "src": [
     "pages/Index",
-    "pages/StepCounterPage"
+    "pages/StepCounterPage",
+    "pages/HistoryPage",
+    "pages/SettingPage",
+    "pages/CircularProgressExample",
+    "pages/BarChartExample"
   ]
 }
