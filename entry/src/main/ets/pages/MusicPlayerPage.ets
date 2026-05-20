@@ -5,6 +5,7 @@ import { AppColors } from '../common/Constants';
 import { MusicControlPanel } from '../components/MusicControlPanel';
 import { MusicListPanel } from '../components/MusicListPanel';
 import { LyricsDisplay } from '../components/LyricsDisplay';
+import { common } from '@kit.AbilityKit';
 
 /**
  * 音乐播放器页面
@@ -56,14 +57,25 @@ struct MusicPlayerPage {
   /**
    * 页面即将显示
    */
-  aboutToAppear(): void {
+  async aboutToAppear(): Promise<void> {
+    // 获取应用上下文
+    const context = getContext(this) as common.UIAbilityContext;
+    
     // 设置状态更新回调
     this.viewModel.setOnUpdateCallback(() => {
       this.updateState();
     });
     
-    // 加载播放列表
-    this.viewModel.loadPlaylist();
+    // 加载播放列表（传入 context 以解析 LRC 歌词文件）
+    this.viewModel.loadPlaylist(context);
+    
+    // 初始化 AVPlayer（用于真实音频播放）
+    try {
+      await this.viewModel.initAVPlayer(context);
+      console.info('MusicPlayerPage: AVPlayer 初始化成功');
+    } catch (error) {
+      console.error('MusicPlayerPage: AVPlayer 初始化失败', error);
+    }
     
     // 初始化状态
     this.updateState();
@@ -71,11 +83,13 @@ struct MusicPlayerPage {
   
   /**
    * 页面即将消失
+   * 注意：不调用 pause()，保持后台播放
+   * 只释放页面级资源，不停止播放
    */
   aboutToDisappear(): void {
-    // 释放资源
-    this.viewModel.pause();
-    this.viewModel.destroy();
+    // 只清除回调，不停止播放
+    this.viewModel.setOnUpdateCallback(null);
+    // 注意：不调用 destroy()，保持后台播放能力
   }
   
   /**
@@ -88,6 +102,19 @@ struct MusicPlayerPage {
     this.totalDuration = this.viewModel.totalDuration;
     this.currentLyricIndex = this.viewModel.currentLyricIndex;
     this.playlist = this.viewModel.playlist;
+    
+    // 调试日志：输出当前歌曲和歌词信息
+    console.info(`MusicPlayerPage: updateState - 当前歌曲: ${this.currentSong?.title ?? '无'}`);
+    if (this.currentSong?.lyrics) {
+      const lyricCount = this.currentSong.lyrics.length;
+      console.info(`MusicPlayerPage: updateState - 歌词行数: ${lyricCount}`);
+      const previewLines = Math.min(3, lyricCount);
+      for (let i = 0; i < previewLines; i++) {
+        console.info(`MusicPlayerPage: updateState - 歌词[${i}]: "${this.currentSong.lyrics[i]}"`);
+      }
+    } else {
+      console.info('MusicPlayerPage: updateState - 无歌词数据');
+    }
   }
   
   /**
@@ -125,12 +152,20 @@ struct MusicPlayerPage {
   /**
    * 选择歌曲
    */
-  private handleSongSelect(song: Song): void {
-    this.viewModel.selectSong(song);
-    // 自动播放
-    this.viewModel.play();
+  private async handleSongSelect(song: Song): Promise<void> {
+    console.info(`MusicPlayerPage: handleSongSelect - 选择歌曲: ${song.title}, 歌词行数: ${song.lyrics.length}`);
+    if (song.lyrics.length > 0) {
+      console.info(`MusicPlayerPage: handleSongSelect - 歌词预览: "${song.lyrics[0]}"`);
+    }
+    
+    // 先切换歌曲
+    await this.viewModel.selectSong(song);
+    
     // 切换到播放标签
     this.currentTabIndex = 0;
+    
+    // 自动播放
+    await this.viewModel.play();
   }
   
   /**
@@ -182,6 +217,7 @@ struct MusicPlayerPage {
               songTitle: this.currentSong?.title ?? '',
               songArtist: this.currentSong?.artist ?? '',
               coverColor: this.currentSong?.coverColor ?? AppColors.PRIMARY,
+              coverImage: this.currentSong?.coverImage,
               isPlaying: this.isPlaying,
               currentTime: this.currentTime,
               totalDuration: this.totalDuration,
@@ -202,8 +238,10 @@ struct MusicPlayerPage {
             // 歌词显示
             LyricsDisplay({
               lyrics: this.currentSong?.lyrics ?? [],
-              currentIndex: this.currentLyricIndex
+              currentIndex: this.currentLyricIndex,
+              timestamps: this.currentSong?.lyricTimestamps ?? []
             })
+              .layoutWeight(1)
           }
           .width('100%')
           .height('100%')

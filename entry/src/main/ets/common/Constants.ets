@@ -12,7 +12,7 @@ export class Constants {
     static readonly DEFAULT_GOAL: number = 6000;
 
     /** 是否使用模拟步数数据 */
-    static readonly USE_MOCK_STEPS: boolean = true;
+    static readonly USE_MOCK_STEPS: boolean = false;
 
     /** 通知ID */
     static readonly NOTIFICATION_ID: number = 1001;

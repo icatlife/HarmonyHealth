@@ -22,9 +22,14 @@ export struct MusicControlPanel {
   @Prop coverColor: string = AppColors.PRIMARY;
   
   /**
+   * 封面图片资源（可选）
+   */
+  @Prop coverImage: ResourceStr | undefined = undefined;
+  
+  /**
    * 是否正在播放
    */
-  @Prop isPlaying: boolean = false;
+  @Prop @Watch('onPlayingChange') isPlaying: boolean = false;
   
   /**
    * 当前播放时间（秒）
@@ -57,6 +62,70 @@ export struct MusicControlPanel {
   onSeek: (time: number) => void = (time: number) => {};
   
   /**
+   * 封面旋转角度
+   */
+  @State private rotationAngle: number = 0;
+  
+  /**
+   * 旋转定时器ID
+   */
+  private rotationTimer: number = -1;
+  
+  /**
+   * 组件即将出现
+   */
+  aboutToAppear(): void {
+    this.updateRotationAnimation();
+  }
+  
+  /**
+   * 组件即将消失
+   */
+  aboutToDisappear(): void {
+    this.stopRotation();
+  }
+  
+  /**
+   * 更新旋转动画状态
+   */
+  private updateRotationAnimation(): void {
+    if (this.isPlaying) {
+      this.startRotation();
+    } else {
+      this.stopRotation();
+    }
+  }
+  
+  /**
+   * 启动旋转动画
+   * 约 20 秒转一圈（每 50ms 增加 0.9 度）
+   */
+  private startRotation(): void {
+    if (this.rotationTimer === -1) {
+      this.rotationTimer = setInterval(() => {
+        this.rotationAngle = (this.rotationAngle + 0.9) % 360;
+      }, 50);
+    }
+  }
+  
+  /**
+   * 停止旋转动画
+   */
+  private stopRotation(): void {
+    if (this.rotationTimer !== -1) {
+      clearInterval(this.rotationTimer);
+      this.rotationTimer = -1;
+    }
+  }
+  
+  /**
+   * 监听 isPlaying 变化
+   */
+  onPlayingChange(): void {
+    this.updateRotationAnimation();
+  }
+  
+  /**
    * 组件构建
    */
   build() {
@@ -80,22 +149,40 @@ export struct MusicControlPanel {
       .alignItems(HorizontalAlign.Center)
       
       // 封面占位区
-      Column() {
-        Text('🎵')
-          .fontSize(48)
+      if (this.coverImage) {
+        // 有封面图片：显示图片，裁剪为圆形
+        Image(this.coverImage)
+          .width(140)
+          .height(140)
+          .borderRadius(70)
+          .objectFit(ImageFit.Cover)
+          .shadow({
+            radius: 16,
+            color: 'rgba(0, 0, 0, 0.1)',
+            offsetX: 0,
+            offsetY: 8
+          })
+          .rotate({ angle: this.rotationAngle })
+      } else {
+        // 无封面图片：显示纯色圆形 + emoji
+        Column() {
+          Text('🎵')
+            .fontSize(48)
+        }
+        .width(140)
+        .height(140)
+        .borderRadius(70)
+        .backgroundColor(this.coverColor)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+        .shadow({
+          radius: 16,
+          color: 'rgba(0, 0, 0, 0.1)',
+          offsetX: 0,
+          offsetY: 8
+        })
+        .rotate({ angle: this.rotationAngle })
       }
-      .width(140)
-      .height(140)
-      .borderRadius(70)
-      .backgroundColor(this.coverColor)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
-      .shadow({
-        radius: 16,
-        color: 'rgba(0, 0, 0, 0.1)',
-        offsetX: 0,
-        offsetY: 8
-      })
       
       // 进度条区
       Column({ space: 8 }) {

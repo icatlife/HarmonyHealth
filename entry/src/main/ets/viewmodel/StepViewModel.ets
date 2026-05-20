@@ -8,11 +8,30 @@ import { backgroundTaskManager } from '@kit.BackgroundTasksKit';
 import { wantAgent, WantAgent } from '@kit.AbilityKit';
 
 /**
- * 计步数据视图模型
+ * 计步数据视图模型（单例模式）
  * 作为UI层与数据层、传感器层之间的桥梁
  * 管理步数追踪状态、数据持久化和进度计算
+ *
+ * 单例模式说明：
+ * - 使用 getInstance() 获取唯一实例
+ * - 确保后台计步状态在页面切换时保持
  */
 export class StepViewModel {
+    /**
+     * 单例实例
+     */
+    private static instance: StepViewModel | null = null;
+
+    /**
+     * 获取单例实例
+     */
+    static getInstance(): StepViewModel {
+        if (!StepViewModel.instance) {
+            StepViewModel.instance = new StepViewModel();
+        }
+        return StepViewModel.instance;
+    }
+
     /**
      * 数据库助手实例
      */
@@ -47,6 +66,11 @@ export class StepViewModel {
      * 是否正在追踪步数
      */
     private isTracking: boolean = false;
+
+    /**
+     * 是否已初始化
+     */
+    private isInitialized: boolean = false;
 
     /**
      * 步数变化回调函数
@@ -101,7 +125,7 @@ export class StepViewModel {
      * 设置步数变化回调
      * @param callback 回调函数
      */
-    public setOnStepChangeCallback(callback: (steps: number, goal: number, percent: number) => void): void {
+    public setOnStepChangeCallback(callback: ((steps: number, goal: number, percent: number) => void) | null): void {
         this.onStepChangeCallback = callback;
     }
 
@@ -132,6 +156,12 @@ export class StepViewModel {
      * @param context 应用上下文
      */
     async init(context: common.Context): Promise<void> {
+        // 防止重复初始化
+        if (this.isInitialized) {
+            console.info('StepViewModel: Already initialized, skipping');
+            return;
+        }
+
         try {
             // 保存应用上下文用于后台任务
             this.context = context;
@@ -170,6 +200,7 @@ export class StepViewModel {
             await this.setupMorningReminder();
             
             console.info('StepViewModel: Initialized successfully');
+            this.isInitialized = true;
             
         } catch (error) {
             console.error(`StepViewModel: Failed to initialize. Error: ${JSON.stringify(error)}`);

@@ -11,7 +11,7 @@ import router from '@ohos.router';
 @Entry
 @Component
 struct StepCounterPage {
-  private stepVM: StepViewModel = new StepViewModel();
+  private stepVM: StepViewModel = StepViewModel.getInstance();
   
   @State private currentSteps: number = 0;
   @State private goalSteps: number = 10000;
@@ -40,15 +40,16 @@ struct StepCounterPage {
     });
   }
   
+  /**
+   * 页面即将消失
+   * 注意：不调用 stopTracking()，保持后台计步
+   * 只清除回调，不停止追踪
+   */
   aboutToDisappear(): void {
-    console.info('StepCounterPage: aboutToDisappear - Cleaning up resources');
+    console.info('StepCounterPage: aboutToDisappear - Clearing callbacks only');
     
-    this.stepVM.stopTracking().then(() => {
-      this.isTracking = false;
-      console.info('StepCounterPage: Step tracking stopped');
-    });
-    
-    this.stepVM.destroy();
+    // 只清除回调，不停止追踪
+    this.stepVM.setOnStepChangeCallback(null);
   }
   
   private updateUI(steps: number, goal: number, percent: number): void {
