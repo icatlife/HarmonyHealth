@@ -5,6 +5,7 @@
     "pages/HistoryPage",
     "pages/SettingPage",
     "pages/CircularProgressExample",
-    "pages/BarChartExample"
+    "pages/BarChartExample",
+    "pages/MusicPlayerPage"
   ]
 }

@@ -1,7 +1,10 @@
+import { AppColors, getProgressGradient } from '../common/Constants';
+
 /**
  * 环形进度条自定义组件
  * 用于展示步数完成进度的环形图表
- * 支持平滑动画过渡和渐变色效果
+ * 支持平滑动画过渡和薄荷绿渐变色效果
+ * 中央文字使用 Canvas 绘制，确保精确居中
  */
 @Component
 export struct CircularProgress {
@@ -14,6 +17,11 @@ export struct CircularProgress {
    * 目标步数
    */
   @Prop @Watch('onTotalChanged') total: number = 10000;
+  
+  /**
+   * 是否显示中央文字（用于主页大尺寸显示）
+   */
+  @Prop showCenterText: boolean = true;
   
   /**
    * 动画进度值（0-100）
@@ -36,60 +44,52 @@ export struct CircularProgress {
   private context: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.settings);
   
   /**
+   * 画布宽度（动态获取）
+   */
+  private canvasWidth: number = 200;
+  
+  /**
+   * 画布高度（动态获取）
+   */
+  private canvasHeight: number = 200;
+  
+  /**
    * 环形半径
    */
-  private radius: number = 0;
+  private radius: number = 85;
   
   /**
    * 环形线宽
    */
-  private strokeWidth: number = 0;
+  private strokeWidth: number = 14;
   
   /**
    * 画布中心点X坐标
    */
-  private centerX: number = 0;
+  private centerX: number = 100;
   
   /**
    * 画布中心点Y坐标
    */
-  private centerY: number = 0;
+  private centerY: number = 100;
   
   /**
    * 组件构建
    */
   build() {
-    Column({ space: 8 }) {
-      // Canvas 环形进度条
+    Stack({ alignContent: Alignment.Center }) {
+      // Canvas 环形进度条（包含中央文字）
       Canvas(this.context)
-        .width(200)
-        .height(200)
+        .width('100%')
+        .height('100%')
         .backgroundColor(Color.Transparent)
         .onReady(() => {
           this.initCanvas();
           this.drawCircle();
         })
-      
-      // 中央文本显示
-      Column({ space: 4 }) {
-        // 当前步数（大字体）
-        Text(this.animatedCurrent.toLocaleString())
-          .fontSize(24)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#0F172A')
-        
-        // 百分比进度（四舍五入到整数）
-        Text(`${Math.round(this.animatedProgress)}%`)
-          .fontSize(14)
-          .fontColor('#64748B')
-      }
-      .position({ x: 0, y: 0 })
-      .alignItems(HorizontalAlign.Center)
     }
     .width('100%')
     .height('100%')
-    .alignItems(HorizontalAlign.Center)
-    .justifyContent(FlexAlign.Center)
     .onAppear(() => {
       // 组件出现时初始化动画
       this.startAnimation();
@@ -97,14 +97,24 @@ export struct CircularProgress {
   }
   
   /**
-   * 初始化Canvas参数
+   * 初始化Canvas参数（基于实际尺寸动态计算）
    */
   private initCanvas(): void {
-    // 设置画布尺寸相关参数
-    this.radius = 80;
-    this.strokeWidth = 12;
-    this.centerX = 100; // 画布宽度/2
-    this.centerY = 100; // 画布高度/2
+    // 获取 Canvas 实际绘制尺寸
+    const canvasSize = this.context.width;
+    this.canvasWidth = canvasSize;
+    this.canvasHeight = canvasSize;
+    
+    // 动态计算圆心坐标（Canvas 的正中央）
+    this.centerX = this.canvasWidth / 2;
+    this.centerY = this.canvasHeight / 2;
+    
+    // 动态计算环形半径（留出边距）
+    const padding = 15; // 边距
+    this.radius = (Math.min(this.canvasWidth, this.canvasHeight) / 2) - padding;
+    
+    // 动态计算线宽（根据尺寸比例）
+    this.strokeWidth = Math.max(10, this.radius * 0.12);
   }
   
   /**
@@ -112,69 +122,99 @@ export struct CircularProgress {
    */
   private drawCircle(): void {
     // 清除画布
-    this.context.clearRect(0, 0, 200, 200);
+    this.context.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
     
     // 绘制背景环
     this.drawBackgroundCircle();
     
     // 绘制前景进度环
     this.drawProgressCircle();
+    
+    // 绘制中央文字
+    if (this.showCenterText) {
+      this.drawCenterText();
+    }
   }
   
   /**
-   * 绘制背景环（灰色）
+   * 绘制背景环（浅灰色）
    */
   private drawBackgroundCircle(): void {
     this.context.beginPath();
     this.context.arc(this.centerX, this.centerY, this.radius, 0, Math.PI * 2);
-    this.context.strokeStyle = '#E2E8F0'; // 浅灰色
+    this.context.strokeStyle = '#E8E8E8';
     this.context.lineWidth = this.strokeWidth;
-    this.context.lineCap = 'round'; // 圆头端点
+    this.context.lineCap = 'round';
     this.context.stroke();
   }
   
   /**
-   * 绘制前景进度环（渐变色）
+   * 绘制前景进度环（薄荷绿渐变色）
    */
   private drawProgressCircle(): void {
     if (this.animatedProgress <= 0) return;
     
     // 计算进度角度（从顶部开始，顺时针）
-    const startAngle = -Math.PI / 2; // 顶部（-90度）
+    const startAngle = -Math.PI / 2;
     const endAngle = startAngle + (Math.PI * 2 * this.animatedProgress) / 100;
+    
+    // 获取薄荷绿渐变色
+    const gradientColors = getProgressGradient(this.animatedProgress);
+    const colorStart = gradientColors[0];
+    const colorEnd = gradientColors[1];
     
     // 创建渐变色
     const gradient = this.context.createLinearGradient(
       this.centerX - this.radius, this.centerY,
       this.centerX + this.radius, this.centerY
     );
-    
-    // 根据进度选择渐变色
-    if (this.animatedProgress >= 100) {
-      // 完成状态：绿色渐变
-      gradient.addColorStop(0, '#10B981'); // 翠绿色
-      gradient.addColorStop(1, '#059669'); // 深绿色
-    } else if (this.animatedProgress >= 70) {
-      // 良好进度：蓝绿色渐变
-      gradient.addColorStop(0, '#3B82F6'); // 蓝色
-      gradient.addColorStop(1, '#06B6D4'); // 青色
-    } else if (this.animatedProgress >= 40) {
-      // 中等进度：橙黄色渐变
-      gradient.addColorStop(0, '#F59E0B'); // 橙色
-      gradient.addColorStop(1, '#EAB308'); // 黄色
-    } else {
-      // 低进度：红色渐变
-      gradient.addColorStop(0, '#EF4444'); // 红色
-      gradient.addColorStop(1, '#DC2626'); // 深红色
-    }
+    gradient.addColorStop(0, colorStart);
+    gradient.addColorStop(1, colorEnd);
     
     // 绘制进度环
     this.context.beginPath();
     this.context.arc(this.centerX, this.centerY, this.radius, startAngle, endAngle);
     this.context.strokeStyle = gradient;
     this.context.lineWidth = this.strokeWidth;
-    this.context.lineCap = 'round'; // 圆头端点
+    this.context.lineCap = 'round';
     this.context.stroke();
+  }
+  
+  /**
+   * 绘制中央文字（以圆心为中心精确居中）
+   */
+  private drawCenterText(): void {
+    // 设置文字对齐方式（确保文字以指定坐标为中心）
+    this.context.textAlign = 'center';
+    this.context.textBaseline = 'middle';
+    
+    // 计算字体大小（根据半径动态调整）
+    const stepFontSize = Math.max(24, this.radius * 0.35);
+    const percentFontSize = Math.max(12, this.radius * 0.18);
+    
+    // 步数文字的 Y 坐标（圆心稍微上移，为百分比留出空间）
+    const stepY = this.centerY - this.radius * 0.08;
+    
+    // 百分比文字的 Y 坐标（步数下方）
+    const percentY = this.centerY + this.radius * 0.22;
+    
+    // 绘制步数数字
+    this.context.font = `bold ${stepFontSize}px sans-serif`;
+    this.context.fillStyle = AppColors.PRIMARY;
+    this.context.fillText(
+      this.animatedCurrent.toLocaleString(),
+      this.centerX,
+      stepY
+    );
+    
+    // 绘制百分比进度
+    this.context.font = `${percentFontSize}px sans-serif`;
+    this.context.fillStyle = AppColors.TEXT_SECONDARY;
+    this.context.fillText(
+      `${Math.round(this.animatedProgress)}%`,
+      this.centerX,
+      percentY
+    );
   }
   
   /**
@@ -186,9 +226,9 @@ export struct CircularProgress {
     
     // 使用 animateTo 实现平滑动画
     animateTo({
-      duration: 800, // 动画时长800ms
-      tempo: 0.8,    // 动画节奏
-      curve: Curve.EaseOut // 缓出效果
+      duration: 800,
+      tempo: 0.8,
+      curve: Curve.EaseOut
     }, () => {
       this.animatedProgress = targetProgress;
       this.animatedCurrent = this.current;
@@ -202,7 +242,6 @@ export struct CircularProgress {
    * 监听 current 属性变化
    */
   onCurrentChanged(): void {
-    // 当 current 变化时重新启动动画
     this.startAnimation();
   }
   
@@ -210,36 +249,6 @@ export struct CircularProgress {
    * 监听 total 属性变化
    */
   onTotalChanged(): void {
-    // 当 total 变化时重新启动动画
     this.startAnimation();
   }
 }
-
-/**
- * 组件使用示例：
- * 
- * @Component
- * struct ExamplePage {
- *   @State currentSteps: number = 3500;
- *   @State goalSteps: number = 10000;
- *   
- *   build() {
- *     Column() {
- *       CircularProgress({ 
- *         current: this.currentSteps, 
- *         total: this.goalSteps 
- *       })
- *       .width(200)
- *       .height(200)
- *     }
- *   }
- * }
- * 
- * 组件特性：
- * 1. 平滑动画：使用 animateTo 实现进度和数字的平滑过渡
- * 2. 智能渐变色：根据完成度自动选择颜色（红→橙→蓝→绿）
- * 3. 圆头端点：进度条两端为圆形，视觉效果更佳
- * 4. 响应式设计：自动适配容器尺寸
- * 5. 中央显示：同时显示步数和百分比，信息完整
- * 6. Canvas绘制：使用HarmonyOS标准Canvas API，性能优秀
- */

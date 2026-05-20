@@ -1,6 +1,7 @@
 import { DatabaseHelper } from '../model/DatabaseHelper';
 import { BarChart } from '../components/BarChart';
 import { DateUtils } from '../common/DateUtils';
+import { AppColors, AppStyles } from '../common/Constants';
 import common from '@ohos.app.ability.common';
 import router from '@ohos.router';
 
@@ -18,17 +19,12 @@ struct HistoryPage {
   @State dateLabels: string[] = [];
   @State averageSteps: number = 0;
   @State isLoading: boolean = true;
+  @State totalSteps: number = 0;
   
-  /**
-   * 页面即将显示时的生命周期函数
-   */
   async aboutToAppear() {
     await this.loadHistoryData();
   }
   
-  /**
-   * 加载历史数据
-   */
   private async loadHistoryData(): Promise<void> {
     try {
       this.isLoading = true;
@@ -36,45 +32,31 @@ struct HistoryPage {
       const dbHelper = DatabaseHelper.getInstance();
       const context = getContext() as common.Context;
       
-      // 确保数据库初始化完成
       await dbHelper.initDatabase(context);
       
-      // 获取近7天历史记录
       const weekHistory: HistoryRecord[] = await dbHelper.getWeekHistory() as HistoryRecord[];
       
-      // 处理数据用于图表展示
       this.processHistoryData(weekHistory);
-      
-      // 计算日均步数
       this.calculateAverageSteps(weekHistory);
       
     } catch (error) {
       console.error('加载历史数据失败:', error);
-      
-      // 显示模拟数据
       this.showSampleData();
     } finally {
       this.isLoading = false;
     }
   }
   
-  /**
-   * 处理历史数据用于图表展示
-   * 关键修复：确保显示完整的7天数据，缺失日期补0
-   */
   private processHistoryData(history: HistoryRecord[]): void {
     if (history.length === 0) {
-      // 如果没有数据，显示完整的7天空白数据
       this.showCompleteWeekData();
       return;
     }
     
-    // 创建最近7天的完整日期范围
     const today = new Date();
     const weekDates: string[] = [];
     const weekLabels: string[] = [];
     
-    // 生成最近7天的完整日期列表（从6天前到今天）
     for (let i = 6; i >= 0; i--) {
       const date = new Date(today);
       date.setDate(today.getDate() - i);
@@ -87,16 +69,13 @@ struct HistoryPage {
       weekLabels.push(`${month}-${day}`);
     }
     
-    // 将数据库查询结果映射到完整的7天数据上
     const steps: number[] = [];
     
-    // 创建日期到步数的映射
     const dateToStepsMap: Map<string, number> = new Map();
     history.forEach((record: HistoryRecord) => {
       dateToStepsMap.set(record.date, record.steps);
     });
     
-    // 为每个日期获取步数，没有记录的显示0
     weekDates.forEach((dateStr: string) => {
       const stepsForDate = dateToStepsMap.get(dateStr) || 0;
       steps.push(stepsForDate);
@@ -108,58 +87,45 @@ struct HistoryPage {
     console.info(`Processed ${steps.length} days of data: ${steps.join(', ')}`);
   }
   
-  /**
-   * 计算日均步数
-   * 关键修复：基于完整的7天数据计算，缺失日期按0步计算
-   */
   private calculateAverageSteps(history: HistoryRecord[]): void {
-    // 计算7天的总步数（包括缺失的日期按0计算）
     let totalSteps = 0;
     
     if (history.length === 0) {
-      // 如果没有数据，日均步数为0
       this.averageSteps = 0;
+      this.totalSteps = 0;
       return;
     }
     
-    // 创建最近7天的完整日期范围
     const today = new Date();
     const weekDates: string[] = [];
     
-    // 生成最近7天的完整日期列表
     for (let i = 6; i >= 0; i--) {
       const date = new Date(today);
       date.setDate(today.getDate() - i);
       weekDates.push(DateUtils.formatDate(date));
     }
     
-    // 创建日期到步数的映射
     const dateToStepsMap: Map<string, number> = new Map();
     history.forEach((record: HistoryRecord) => {
       dateToStepsMap.set(record.date, record.steps);
     });
     
-    // 计算7天的总步数
     weekDates.forEach((dateStr: string) => {
       totalSteps += dateToStepsMap.get(dateStr) || 0;
     });
     
-    // 基于7天计算日均步数
+    this.totalSteps = totalSteps;
     this.averageSteps = Math.round(totalSteps / 7);
     
     console.info(`Calculated average steps: ${this.averageSteps} (total: ${totalSteps} over 7 days)`);
   }
   
-  /**
-   * 显示完整的7天空白数据（用于无数据时展示）
-   */
   private showCompleteWeekData(): void {
     const weekData: number[] = [];
     const weekLabels: string[] = [];
     
     const today = new Date();
     
-    // 生成最近7天的完整数据，全部为0
     for (let i = 6; i >= 0; i--) {
       const date = new Date(today);
       date.setDate(today.getDate() - i);
@@ -174,15 +140,12 @@ struct HistoryPage {
     this.stepData = weekData;
     this.dateLabels = weekLabels;
     this.averageSteps = 0;
+    this.totalSteps = 0;
     
     console.info('Displaying complete week data with zeros');
   }
 
-  /**
-   * 显示示例数据（用于演示）
-   */
   private showSampleData(): void {
-    // 生成示例数据
     const sampleData: number[] = [];
     const sampleLabels: string[] = [];
     
@@ -201,16 +164,40 @@ struct HistoryPage {
     
     this.stepData = sampleData;
     this.dateLabels = sampleLabels;
-    this.averageSteps = Math.round(sampleData.reduce((a: number, b: number) => a + b, 0) / sampleData.length);
+    this.totalSteps = sampleData.reduce((a: number, b: number) => a + b, 0);
+    this.averageSteps = Math.round(this.totalSteps / sampleData.length);
   }
   
-  /**
-   * 返回主页
-   */
   private goBack(): void {
     router.back();
   }
   
+  /**
+   * 获取运动建议
+   */
+  private getAdviceText(): string {
+    if (this.averageSteps >= 8000) {
+      return '🌟 优秀！继续保持活跃的生活方式';
+    } else if (this.averageSteps >= 5000) {
+      return '💪 良好！每天多走几步效果更佳';
+    } else {
+      return '👣 加油！增加日常活动量有益健康';
+    }
+  }
+  
+  /**
+   * 获取建议颜色
+   */
+  private getAdviceColor(): string {
+    if (this.averageSteps >= 8000) {
+      return AppColors.SUCCESS;
+    } else if (this.averageSteps >= 5000) {
+      return AppColors.WARNING;
+    } else {
+      return AppColors.PRIMARY;
+    }
+  }
+
   build() {
     Column({ space: 0 }) {
       // 顶部导航栏
@@ -218,7 +205,7 @@ struct HistoryPage {
         Button('←')
           .fontSize(20)
           .fontWeight(FontWeight.Bold)
-          .fontColor('#3B82F6')
+          .fontColor(AppColors.PRIMARY)
           .backgroundColor(Color.Transparent)
           .width(40)
           .height(40)
@@ -229,31 +216,29 @@ struct HistoryPage {
         Text('历史数据')
           .fontSize(20)
           .fontWeight(FontWeight.Bold)
-          .fontColor('#1E293B')
+          .fontColor(AppColors.TEXT_PRIMARY)
           .layoutWeight(1)
           .textAlign(TextAlign.Center)
         
-        // 占位元素，保持布局平衡
         Blank()
           .width(40)
       }
       .width('100%')
-      .padding({ top: 40, bottom: 20, left: 16, right: 16 })
+      .padding({ top: 40, bottom: 20, left: AppStyles.SPACING_MD, right: AppStyles.SPACING_MD })
       
       // 主要内容区域
       Scroll() {
-        Column({ space: 24 }) {
+        Column({ space: AppStyles.SPACING_LG }) {
           if (this.isLoading) {
-            // 加载状态
-            Column({ space: 16 }) {
+            Column({ space: AppStyles.SPACING_MD }) {
               LoadingProgress()
                 .width(40)
                 .height(40)
-                .color('#3B82F6')
+                .color(AppColors.PRIMARY)
               
               Text('正在加载历史数据...')
                 .fontSize(16)
-                .fontColor('#64748B')
+                .fontColor(AppColors.TEXT_SECONDARY)
             }
             .width('100%')
             .height(200)
@@ -261,14 +246,7 @@ struct HistoryPage {
             .alignItems(HorizontalAlign.Center)
           } else {
             // 图表区域
-            Column({ space: 20 }) {
-              Text('近7天步数趋势')
-                .fontSize(18)
-                .fontWeight(FontWeight.Medium)
-                .fontColor('#1E293B')
-                .width('100%')
-                .textAlign(TextAlign.Start)
-              
+            Column({ space: AppStyles.SPACING_MD }) {
               BarChart({
                 data: this.stepData,
                 labels: this.dateLabels
@@ -276,93 +254,166 @@ struct HistoryPage {
               .width('100%')
             }
             .width('100%')
-            .padding(24)
-            .backgroundColor('#F8FAFC')
-            .borderRadius(20)
+            .padding(AppStyles.SPACING_MD)
+            .backgroundColor(AppColors.CARD_BACKGROUND)
+            .borderRadius(AppStyles.BORDER_RADIUS_LG)
+            .shadow(AppStyles.CARD_SHADOW)
             
-            // 统计数据区域
-            Column({ space: 16 }) {
+            // 统计数据卡片
+            Column({ space: AppStyles.SPACING_MD }) {
               Text('运动统计')
                 .fontSize(18)
                 .fontWeight(FontWeight.Medium)
-                .fontColor('#1E293B')
+                .fontColor(AppColors.TEXT_PRIMARY)
                 .width('100%')
                 .textAlign(TextAlign.Start)
               
-              Row() {
-                Column({ space: 8 }) {
-                  Text('日均步数')
-                    .fontSize(14)
-                    .fontColor('#64748B')
-                  
-                  Text(this.averageSteps.toLocaleString())
-                    .fontSize(24)
-                    .fontWeight(FontWeight.Bold)
-                    .fontColor('#3B82F6')
-                }
-                .layoutWeight(1)
-                .alignItems(HorizontalAlign.Start)
+              // 统计数据网格
+              Row({ space: AppStyles.SPACING_MD }) {
+                // 日均步数
+                this.buildStatCard(
+                  '📈',
+                  '日均步数',
+                  this.averageSteps.toLocaleString()
+                )
                 
-                Column({ space: 8 }) {
-                  Text('总步数')
-                    .fontSize(14)
-                    .fontColor('#64748B')
-                  
-                  Text(this.stepData.reduce((a: number, b: number) => a + b, 0).toLocaleString())
-                    .fontSize(24)
-                    .fontWeight(FontWeight.Bold)
-                    .fontColor('#10B981')
-                }
-                .layoutWeight(1)
-                .alignItems(HorizontalAlign.Start)
+                // 总步数
+                this.buildStatCard(
+                  '🎯',
+                  '总步数',
+                  this.totalSteps.toLocaleString()
+                )
               }
               .width('100%')
               
               // 运动建议
-              if (this.averageSteps >= 8000) {
-                Text('🌟 优秀！继续保持活跃的生活方式')
+              Column({ space: 8 }) {
+                Text(this.getAdviceText())
                   .fontSize(14)
-                  .fontColor('#10B981')
+                  .fontColor(this.getAdviceColor())
                   .textAlign(TextAlign.Center)
-                  .width('100%')
-                  .padding(12)
-                  .backgroundColor('#10B98110')
-                  .borderRadius(8)
-              } else if (this.averageSteps >= 5000) {
-                Text('💪 良好！每天多走几步效果更佳')
-                  .fontSize(14)
-                  .fontColor('#F59E0B')
-                  .textAlign(TextAlign.Center)
-                  .width('100%')
-                  .padding(12)
-                  .backgroundColor('#F59E0B10')
-                  .borderRadius(8)
-              } else {
-                Text('👣 加油！增加日常活动量有益健康')
-                  .fontSize(14)
-                  .fontColor('#EF4444')
-                  .textAlign(TextAlign.Center)
-                  .width('100%')
-                  .padding(12)
-                  .backgroundColor('#EF444410')
-                  .borderRadius(8)
               }
+              .width('100%')
+              .padding(AppStyles.SPACING_MD)
+              .backgroundColor(this.getAdviceColor() + '15')
+              .borderRadius(AppStyles.BORDER_RADIUS)
             }
             .width('100%')
-            .padding(24)
-            .backgroundColor(Color.White)
-            .borderRadius(20)
-            .shadow({ radius: 8, color: '#00000008', offsetX: 0, offsetY: 2 })
+            .padding(AppStyles.SPACING_LG)
+            .backgroundColor(AppColors.CARD_BACKGROUND)
+            .borderRadius(AppStyles.BORDER_RADIUS_LG)
+            .shadow(AppStyles.CARD_SHADOW)
+            
+            // 本周亮点
+            this.buildWeeklyHighlight()
           }
         }
         .width('100%')
-        .padding(20)
+        .padding(AppStyles.PAGE_PADDING)
       }
       .scrollBar(BarState.Off)
       .layoutWeight(1)
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#FFFFFF')
+    .backgroundColor(AppColors.BACKGROUND)
+  }
+  
+  /**
+   * 构建统计卡片
+   */
+  @Builder
+  buildStatCard(icon: string, label: string, value: string) {
+    Column({ space: 8 }) {
+      Text(icon)
+        .fontSize(24)
+      
+      Text(value)
+        .fontSize(22)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(AppColors.PRIMARY)
+      
+      Text(label)
+        .fontSize(12)
+        .fontColor(AppColors.TEXT_SECONDARY)
+    }
+    .layoutWeight(1)
+    .padding(AppStyles.SPACING_MD)
+    .backgroundColor(AppColors.BACKGROUND)
+    .borderRadius(AppStyles.BORDER_RADIUS)
+  }
+  
+  /**
+   * 构建本周亮点
+   */
+  @Builder
+  buildWeeklyHighlight() {
+    Column({ space: AppStyles.SPACING_MD }) {
+      Text('本周亮点')
+        .fontSize(18)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(AppColors.TEXT_PRIMARY)
+        .width('100%')
+        .textAlign(TextAlign.Start)
+      
+      Row({ space: AppStyles.SPACING_MD }) {
+        // 最高步数
+        Column({ space: 4 }) {
+          Text('🏆')
+            .fontSize(20)
+          Text('最高')
+            .fontSize(12)
+            .fontColor(AppColors.TEXT_SECONDARY)
+          Text(Math.max(...this.stepData).toLocaleString())
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(AppColors.SUCCESS)
+        }
+        .layoutWeight(1)
+        .padding(AppStyles.SPACING_MD)
+        .backgroundColor(AppColors.BACKGROUND)
+        .borderRadius(AppStyles.BORDER_RADIUS)
+        
+        // 最低步数
+        Column({ space: 4 }) {
+          Text('📉')
+            .fontSize(20)
+          Text('最低')
+            .fontSize(12)
+            .fontColor(AppColors.TEXT_SECONDARY)
+          Text(Math.min(...this.stepData.filter(v => v > 0)).toLocaleString() || '0')
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(AppColors.WARNING)
+        }
+        .layoutWeight(1)
+        .padding(AppStyles.SPACING_MD)
+        .backgroundColor(AppColors.BACKGROUND)
+        .borderRadius(AppStyles.BORDER_RADIUS)
+        
+        // 活跃天数
+        Column({ space: 4 }) {
+          Text('📅')
+            .fontSize(20)
+          Text('活跃')
+            .fontSize(12)
+            .fontColor(AppColors.TEXT_SECONDARY)
+          Text(this.stepData.filter(v => v > 0).length + '天')
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(AppColors.PRIMARY)
+        }
+        .layoutWeight(1)
+        .padding(AppStyles.SPACING_MD)
+        .backgroundColor(AppColors.BACKGROUND)
+        .borderRadius(AppStyles.BORDER_RADIUS)
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding(AppStyles.SPACING_LG)
+    .backgroundColor(AppColors.CARD_BACKGROUND)
+    .borderRadius(AppStyles.BORDER_RADIUS_LG)
+    .shadow(AppStyles.CARD_SHADOW)
   }
 }
