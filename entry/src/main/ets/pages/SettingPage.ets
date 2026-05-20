@@ -2,6 +2,7 @@ import { DatabaseHelper } from '../model/DatabaseHelper';
 import common from '@ohos.app.ability.common';
 import router from '@ohos.router';
 import promptAction from '@ohos.promptAction';
+import { notificationManager } from '@kit.NotificationKit';
 
 @Entry
 @Component
@@ -82,41 +83,38 @@ struct SettingPage {
    */
   private async requestNotificationPermission(): Promise<void> {
     try {
-      // 这里应该调用实际的权限请求API
-      // 目前使用模拟实现
+      const context = getContext() as common.Context;
       
-      promptAction.showDialog({
-        title: '通知权限',
-        message: '健康步数需要通知权限来提醒您达成运动目标。是否允许？',
-        buttons: [
-          {
-            text: '取消',
-            color: '#64748B'
-          },
-          {
-            text: '允许',
-            color: '#3B82F6'
-          }
-        ]
-      }).then(result => {
-        if (result.index === 1) {
-          this.isNotificationEnabled = true;
-          promptAction.showToast({
-            message: '通知权限已开启',
-            duration: 2000
-          });
-        }
+      console.info('开始请求通知权限...');
+      
+      // 调用真实的权限请求API - 使用正确的API签名
+      await notificationManager.requestEnableNotification();
+      
+      console.info('通知权限请求成功，用户已授权');
+      this.isNotificationEnabled = true;
+      
+      promptAction.showToast({
+        message: '通知权限已开启',
+        duration: 2000
       });
       
     } catch (error) {
-      console.error('请求通知权限失败:', error);
+      console.error('❌ 请求通知权限失败 - 详细错误信息:');
+      console.error(`错误码: ${error.code}`);
+      console.error(`错误消息: ${error.message}`);
+      console.error(`完整错误对象:`, error);
+      
+      promptAction.showToast({
+        message: `权限请求失败: ${error.message || '未知错误'}`,
+        duration: 3000
+      });
     }
   }
   
   /**
    * 发送测试通知
    */
-  private sendTestNotification(): void {
+  private async sendTestNotification(): Promise<void> {
     if (!this.isNotificationEnabled) {
       promptAction.showToast({
         message: '请先开启通知权限',
@@ -125,12 +123,47 @@ struct SettingPage {
       return;
     }
     
-    // 这里应该调用实际的通知API
-    // 目前使用提示框模拟
-    promptAction.showToast({
-      message: '测试通知已发送！',
-      duration: 2000
-    });
+    try {
+      console.info('开始发送测试通知...');
+      
+      // 创建通知请求
+      const notificationRequest: notificationManager.NotificationRequest = {
+        id: 1002, // 使用不同的ID避免与计步通知冲突
+        content: {
+          notificationContentType: notificationManager.ContentType.NOTIFICATION_CONTENT_BASIC_TEXT,
+          normal: {
+            title: '🔔 测试通知',
+            text: '这是一个来自健康步数应用的测试通知',
+            additionalText: '通知功能正常工作'
+          }
+        },
+        deliveryTime: new Date().getTime(), // 立即发送
+        showDeliveryTime: true
+      };
+      
+      console.info('通知请求对象创建完成:', JSON.stringify(notificationRequest, null, 2));
+      
+      // 发送通知
+      await notificationManager.publish(notificationRequest);
+      
+      console.info('✅ 测试通知发送成功！');
+      
+      promptAction.showToast({
+        message: '测试通知已发送！请查看通知栏',
+        duration: 3000
+      });
+      
+    } catch (error) {
+      console.error('❌ 发送测试通知失败 - 详细错误信息:');
+      console.error(`错误码: ${error.code}`);
+      console.error(`错误消息: ${error.message}`);
+      console.error(`完整错误对象:`, error);
+      
+      promptAction.showToast({
+        message: `通知发送失败: ${error.message || '未知错误'}`,
+        duration: 3000
+      });
+    }
   }
   
   /**

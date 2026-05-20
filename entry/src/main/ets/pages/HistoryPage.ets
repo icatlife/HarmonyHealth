@@ -1,5 +1,6 @@
 import { DatabaseHelper } from '../model/DatabaseHelper';
 import { BarChart } from '../components/BarChart';
+import { DateUtils } from '../common/DateUtils';
 import common from '@ohos.app.ability.common';
 import router from '@ohos.router';
 
@@ -59,66 +60,124 @@ struct HistoryPage {
   
   /**
    * 处理历史数据用于图表展示
+   * 关键修复：确保显示完整的7天数据，缺失日期补0
    */
   private processHistoryData(history: HistoryRecord[]): void {
     if (history.length === 0) {
-      this.showSampleData();
+      // 如果没有数据，显示完整的7天空白数据
+      this.showCompleteWeekData();
       return;
     }
     
-    // 提取步数数据和日期标签
-    const steps: number[] = [];
-    const labels: string[] = [];
+    // 创建最近7天的完整日期范围
+    const today = new Date();
+    const weekDates: string[] = [];
+    const weekLabels: string[] = [];
     
-    // 按照日期倒序排列（最新的在前面）
-    const sortedHistory = [...history].sort((a: HistoryRecord, b: HistoryRecord) => {
-      return new Date(b.date).getTime() - new Date(a.date).getTime();
-    });
-    
-    // 只取最近7天的数据
-    const recentHistory = sortedHistory.slice(0, 7);
-    
-    recentHistory.forEach((record: HistoryRecord) => {
-      steps.push(record.steps);
+    // 生成最近7天的完整日期列表（从6天前到今天）
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(today.getDate() - i);
       
-      // 格式化日期标签
-      const date = new Date(record.date);
+      const dateStr = DateUtils.formatDate(date);
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
-      labels.push(`${month}-${day}`);
-    });
-    
-    // 如果数据不足7天，补充空数据
-    while (steps.length < 7) {
-      steps.unshift(0);
       
-      // 计算缺失的日期
-      const missingDays = 7 - labels.length;
-      const date = new Date();
-      date.setDate(date.getDate() - missingDays);
-      
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      labels.unshift(`${month}-${day}`);
+      weekDates.push(dateStr);
+      weekLabels.push(`${month}-${day}`);
     }
     
+    // 将数据库查询结果映射到完整的7天数据上
+    const steps: number[] = [];
+    
+    // 创建日期到步数的映射
+    const dateToStepsMap: Map<string, number> = new Map();
+    history.forEach((record: HistoryRecord) => {
+      dateToStepsMap.set(record.date, record.steps);
+    });
+    
+    // 为每个日期获取步数，没有记录的显示0
+    weekDates.forEach((dateStr: string) => {
+      const stepsForDate = dateToStepsMap.get(dateStr) || 0;
+      steps.push(stepsForDate);
+    });
+    
     this.stepData = steps;
-    this.dateLabels = labels;
+    this.dateLabels = weekLabels;
+    
+    console.info(`Processed ${steps.length} days of data: ${steps.join(', ')}`);
   }
   
   /**
    * 计算日均步数
+   * 关键修复：基于完整的7天数据计算，缺失日期按0步计算
    */
   private calculateAverageSteps(history: HistoryRecord[]): void {
+    // 计算7天的总步数（包括缺失的日期按0计算）
+    let totalSteps = 0;
+    
     if (history.length === 0) {
+      // 如果没有数据，日均步数为0
       this.averageSteps = 0;
       return;
     }
     
-    const totalSteps = history.reduce((sum: number, record: HistoryRecord) => sum + record.steps, 0);
-    this.averageSteps = Math.round(totalSteps / history.length);
+    // 创建最近7天的完整日期范围
+    const today = new Date();
+    const weekDates: string[] = [];
+    
+    // 生成最近7天的完整日期列表
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(today.getDate() - i);
+      weekDates.push(DateUtils.formatDate(date));
+    }
+    
+    // 创建日期到步数的映射
+    const dateToStepsMap: Map<string, number> = new Map();
+    history.forEach((record: HistoryRecord) => {
+      dateToStepsMap.set(record.date, record.steps);
+    });
+    
+    // 计算7天的总步数
+    weekDates.forEach((dateStr: string) => {
+      totalSteps += dateToStepsMap.get(dateStr) || 0;
+    });
+    
+    // 基于7天计算日均步数
+    this.averageSteps = Math.round(totalSteps / 7);
+    
+    console.info(`Calculated average steps: ${this.averageSteps} (total: ${totalSteps} over 7 days)`);
   }
   
+  /**
+   * 显示完整的7天空白数据（用于无数据时展示）
+   */
+  private showCompleteWeekData(): void {
+    const weekData: number[] = [];
+    const weekLabels: string[] = [];
+    
+    const today = new Date();
+    
+    // 生成最近7天的完整数据，全部为0
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(today.getDate() - i);
+      
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      
+      weekLabels.push(`${month}-${day}`);
+      weekData.push(0);
+    }
+    
+    this.stepData = weekData;
+    this.dateLabels = weekLabels;
+    this.averageSteps = 0;
+    
+    console.info('Displaying complete week data with zeros');
+  }
+
   /**
    * 显示示例数据（用于演示）
    */

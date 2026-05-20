@@ -31,13 +31,14 @@ struct StepCounterPage {
   aboutToAppear(): void {
     console.info('StepCounterPage: aboutToAppear - Initializing step counter');
     
+    // 关键修复：先设置回调，然后再初始化
+    // 确保init()中的triggerCallback()能正确触发UI更新
+    this.stepVM.setOnStepChangeCallback((steps: number, goal: number, percent: number) => {
+      this.updateUI(steps, goal, percent);
+    });
+    
     // 初始化视图模型
     this.stepVM.init(getContext() as common.Context).then(() => {
-      // 设置步数变化回调
-      this.stepVM.setOnStepChangeCallback((steps: number, goal: number, percent: number) => {
-        this.updateUI(steps, goal, percent);
-      });
-      
       // 开始步数追踪
       this.stepVM.startTracking().then(() => {
         this.isTracking = true;

@@ -60,9 +60,26 @@ export class StepViewModel {
     private hasNotifiedToday: boolean = false;
 
     /**
+     * 今日是否已发送运动提醒通知
+     * 用于避免重复提醒
+     */
+    private hasSentMorningReminder: boolean = false;
+
+    /**
+     * 运动提醒定时器ID
+     * 用于管理定时任务
+     */
+    private morningReminderTimer: number = -1;
+
+    /**
      * 通知ID
      */
     private readonly NOTIFICATION_ID: number = 1001;
+
+    /**
+     * 运动提醒通知ID
+     */
+    private readonly MORNING_REMINDER_ID: number = 1003;
 
     /**
      * 后台长时任务ID
@@ -131,11 +148,26 @@ export class StepViewModel {
             // 计算初始进度
             this.refreshProgress();
             
+            // 关键修复：立即触发回调，确保UI在页面初始化时就能显示正确的数据
+            // 修复二次进入页面时步数短暂显示为0的问题
+            // 注意：这里假设回调函数已经在页面初始化前设置完成
+            if (this.onStepChangeCallback) {
+                this.onStepChangeCallback(this._todaySteps, this._todayGoal, this._progressPercent);
+                console.info(`StepViewModel: Initial callback triggered - Steps: ${this._todaySteps}, Goal: ${this._todayGoal}, Percent: ${this._progressPercent}%`);
+            } else {
+                console.warn('StepViewModel: onStepChangeCallback not set, UI may show initial 0 values');
+            }
+            
             // 重置今日通知状态（每天重置）
             this.hasNotifiedToday = false;
+            this.hasSentMorningReminder = false;
+            console.info(`📅 StepViewModel: Notification status reset for new day: ${this.currentDate}`);
             
             // 初始化WantAgent
             await this.initWantAgent();
+            
+            // 设置运动提醒定时器
+            await this.setupMorningReminder();
             
             console.info('StepViewModel: Initialized successfully');
             
@@ -145,6 +177,11 @@ export class StepViewModel {
             this._todaySteps = 0;
             this._todayGoal = Constants.DEFAULT_GOAL;
             this.refreshProgress();
+            
+            // 错误情况下也触发回调，确保UI有数据
+            if (this.onStepChangeCallback) {
+                this.onStepChangeCallback(this._todaySteps, this._todayGoal, this._progressPercent);
+            }
         }
     }
 
@@ -191,6 +228,10 @@ export class StepViewModel {
             
             // 创建传感器管理器实例
             this.stepSensorManager = new StepSensorManager();
+            
+            // 关键修复：将数据库中的已有步数传递给传感器管理器
+            // 确保后续增量累加是在已有步数基础上进行
+            this.stepSensorManager.setInitialSteps(this._todaySteps);
             
             // 设置步数变化回调
             this.stepSensorManager.setOnStepChangeCallback(async (totalSteps: number, increment: number) => {
@@ -363,6 +404,9 @@ export class StepViewModel {
             // 检查目标达成条件并发送通知
             await this.checkGoalAchievement(totalSteps);
             
+            // 检查是否需要取消运动提醒
+            this.checkMorningReminderCancellation(totalSteps);
+            
             console.debug(`StepViewModel: Step updated - Total: ${totalSteps}, Increment: ${increment}`);
             
         } catch (error) {
@@ -379,12 +423,15 @@ export class StepViewModel {
      */
     private async checkGoalAchievement(currentSteps: number): Promise<void> {
         try {
+            // 每次步数更新都检查日期变化，确保通知状态正确重置
+            await this.checkDateChange();
+            
             // 检查是否满足触发条件
             if (currentSteps >= this._todayGoal && !this.hasNotifiedToday) {
-                console.info(`StepViewModel: Goal achieved! Steps: ${currentSteps}, Goal: ${this._todayGoal}`);
+                console.info(`🎯 StepViewModel: Goal achieved! Steps: ${currentSteps}, Goal: ${this._todayGoal}`);
                 
                 // 发送通知
-                await this.sendGoalAchievementNotification();
+                await this.sendGoalAchievementNotification(currentSteps);
                 
                 // 触发振动反馈
                 await this.triggerVibrationFeedback();
@@ -392,37 +439,49 @@ export class StepViewModel {
                 // 标记今日已发送通知
                 this.hasNotifiedToday = true;
                 
-                console.info('StepViewModel: Goal achievement notification and vibration sent');
+                console.info('✅ StepViewModel: Goal achievement notification and vibration sent successfully');
+                console.info(`📊 StepViewModel: Notification sent - Steps: ${currentSteps}, Goal: ${this._todayGoal}, Date: ${this.currentDate}`);
+            } else {
+                // 记录检查结果，便于调试
+                if (currentSteps < this._todayGoal) {
+                    console.debug(`📈 StepViewModel: Progress - Steps: ${currentSteps}/${this._todayGoal} (${Math.round((currentSteps / this._todayGoal) * 100)}%)`);
+                } else if (this.hasNotifiedToday) {
+                    console.debug(`✅ StepViewModel: Goal already achieved today (Steps: ${currentSteps}), notification already sent`);
+                }
             }
             
         } catch (error) {
-            console.error(`StepViewModel: Error in goal achievement check. Error: ${JSON.stringify(error)}`);
+            console.error(`❌ StepViewModel: Error in goal achievement check. Error: ${JSON.stringify(error)}`);
         }
     }
 
     /**
      * 发送目标达成通知
+     * @param currentSteps 当前实际步数
      */
-    private async sendGoalAchievementNotification(): Promise<void> {
+    private async sendGoalAchievementNotification(currentSteps: number): Promise<void> {
         try {
             const notificationRequest: notificationManager.NotificationRequest = {
                 id: this.NOTIFICATION_ID,
                 content: {
                     notificationContentType: notificationManager.ContentType.NOTIFICATION_CONTENT_BASIC_TEXT,
                     normal: {
-                        title: '🎉 恭喜！目标达成',
-                        text: `您已完成今日设定的 ${this._todayGoal} 步目标！`,
-                        additionalText: '继续保持运动的习惯吧！'
+                        title: '🎉 恭喜！今日目标达成',
+                        text: `您已走了 ${currentSteps.toLocaleString()} 步，完成了今日设定的 ${this._todayGoal.toLocaleString()} 步目标！`,
+                        additionalText: '继续保持，明天加油！'
                     }
                 }
             };
             
+            console.info(`📨 StepViewModel: Sending goal achievement notification - ID: ${this.NOTIFICATION_ID}`);
+            
             await notificationManager.publish(notificationRequest);
-            console.info('StepViewModel: Goal achievement notification sent successfully');
+            console.info('✅ StepViewModel: Goal achievement notification sent successfully');
             
         } catch (error) {
             const e: BusinessError = error as BusinessError;
-            console.error(`StepViewModel: Failed to send goal achievement notification. Code: ${e.code}, message: ${e.message}`);
+            console.error(`❌ StepViewModel: Failed to send goal achievement notification. Code: ${e.code}, message: ${e.message}`);
+            console.error(`📊 StepViewModel: Notification details - Steps: ${currentSteps}, Goal: ${this._todayGoal}, Date: ${this.currentDate}`);
         }
     }
 
@@ -461,6 +520,128 @@ export class StepViewModel {
     }
 
     /**
+     * 设置运动提醒定时器
+     * 每天早上8:00检查是否需要发送运动提醒
+     */
+    private async setupMorningReminder(): Promise<void> {
+        try {
+            // 清除之前的定时器
+            if (this.morningReminderTimer !== -1) {
+                clearTimeout(this.morningReminderTimer);
+                this.morningReminderTimer = -1;
+            }
+
+            const now = new Date();
+            const targetTime = new Date();
+            
+            // 设置目标时间为今天上午8:00
+            targetTime.setHours(8, 0, 0, 0);
+            
+            // 如果现在时间已经过了8:00，则设置到明天8:00
+            if (now >= targetTime) {
+                targetTime.setDate(targetTime.getDate() + 1);
+            }
+            
+            const timeUntilReminder = targetTime.getTime() - now.getTime();
+            
+            console.info(`⏰ StepViewModel: Morning reminder scheduled for ${targetTime.toLocaleString()} (in ${Math.round(timeUntilReminder / 1000 / 60)} minutes)`);
+            
+            // 设置定时器
+            this.morningReminderTimer = setTimeout(async () => {
+                await this.checkAndSendMorningReminder();
+                // 重新设置明天的提醒
+                await this.setupMorningReminder();
+            }, timeUntilReminder) as number;
+            
+        } catch (error) {
+            console.error(`❌ StepViewModel: Failed to setup morning reminder. Error: ${JSON.stringify(error)}`);
+        }
+    }
+
+    /**
+     * 检查并发送运动提醒
+     * 满足以下条件时触发：
+     * 1. 当前步数 < 目标步数的20%
+     * 2. 今日尚未发送过运动提醒
+     */
+    private async checkAndSendMorningReminder(): Promise<void> {
+        try {
+            // 检查日期变化
+            await this.checkDateChange();
+            
+            const threshold = this._todayGoal * 0.2; // 20%阈值
+            
+            // 检查触发条件
+            if (this._todaySteps < threshold && !this.hasSentMorningReminder) {
+                console.info(`🏃♂️ StepViewModel: Sending morning reminder - Steps: ${this._todaySteps}, Threshold: ${threshold}, Goal: ${this._todayGoal}`);
+                
+                // 发送运动提醒通知
+                await this.sendMorningReminderNotification();
+                
+                // 标记今日已发送提醒
+                this.hasSentMorningReminder = true;
+                
+                console.info('✅ StepViewModel: Morning reminder notification sent successfully');
+            } else {
+                // 记录检查结果，便于调试
+                if (this._todaySteps >= threshold) {
+                    console.debug(`🏃♂️ StepViewModel: Morning reminder skipped - Steps (${this._todaySteps}) already exceed threshold (${threshold})`);
+                } else if (this.hasSentMorningReminder) {
+                    console.debug(`🏃♂️ StepViewModel: Morning reminder already sent today`);
+                }
+            }
+            
+        } catch (error) {
+            console.error(`❌ StepViewModel: Error in morning reminder check. Error: ${JSON.stringify(error)}`);
+        }
+    }
+
+    /**
+     * 发送运动提醒通知
+     */
+    private async sendMorningReminderNotification(): Promise<void> {
+        try {
+            const notificationRequest: notificationManager.NotificationRequest = {
+                id: this.MORNING_REMINDER_ID,
+                content: {
+                    notificationContentType: notificationManager.ContentType.NOTIFICATION_CONTENT_BASIC_TEXT,
+                    normal: {
+                        title: '🏃♂️ 早上好！该动一动啦',
+                        text: `新的一天开始了，您今天的运动目标是 ${this._todayGoal.toLocaleString()} 步，目前还差得远哦，快起来走走吧！`,
+                        additionalText: '坚持运动，健康生活！'
+                    }
+                }
+            };
+            
+            console.info(`📨 StepViewModel: Sending morning reminder notification - ID: ${this.MORNING_REMINDER_ID}`);
+            
+            await notificationManager.publish(notificationRequest);
+            console.info('✅ StepViewModel: Morning reminder notification sent successfully');
+            
+        } catch (error) {
+            const e: BusinessError = error as BusinessError;
+            console.error(`❌ StepViewModel: Failed to send morning reminder notification. Code: ${e.code}, message: ${e.message}`);
+        }
+    }
+
+    /**
+     * 检查是否需要取消运动提醒
+     * 当步数超过阈值时，取消尚未触发的提醒
+     */
+    private checkMorningReminderCancellation(currentSteps: number): void {
+        const threshold = this._todayGoal * 0.2;
+        
+        if (currentSteps >= threshold && this.morningReminderTimer !== -1 && !this.hasSentMorningReminder) {
+            console.info(`🏃♂️ StepViewModel: Canceling morning reminder - Steps (${currentSteps}) reached threshold (${threshold})`);
+            
+            clearTimeout(this.morningReminderTimer);
+            this.morningReminderTimer = -1;
+            
+            console.info('✅ StepViewModel: Morning reminder canceled');
+        }
+    }
+
+    /**
      * 检查日期变化
      * 如果日期变化，重置今日步数和通知状态
      */
@@ -478,6 +659,11 @@ export class StepViewModel {
             
             // 重置通知状态（每天可以重新触发）
             this.hasNotifiedToday = false;
+            this.hasSentMorningReminder = false;
+            console.info(`📅 StepViewModel: Date changed - Notification status reset for new day: ${today}`);
+            
+            // 重新设置运动提醒定时器
+            await this.setupMorningReminder();
             
             // 加载今天的记录（如果有）
             await this.loadTodayData();
@@ -485,6 +671,8 @@ export class StepViewModel {
             // 重置传感器步数
             if (this.stepSensorManager) {
                 this.stepSensorManager.resetSteps();
+                // 关键修复：重置后需要重新设置初始步数（为0）
+                this.stepSensorManager.setInitialSteps(0);
             }
             
             // 触发回调
@@ -495,15 +683,18 @@ export class StepViewModel {
     /**
      * 加载今日数据
      * 从数据库加载今日步数和目标
+     * 
+     * 关键修复：二次进入计步页面时，需要从数据库加载今日已有的步数
+     * 避免步数从0开始，确保增量累加是在已有步数基础上进行
      */
     private async loadTodayData(): Promise<void> {
         try {
             // 获取今日目标
             this._todayGoal = await this.dbHelper.getTodayGoal();
             
-            // 注意：DatabaseHelper 没有直接获取今日步数的方法
-            // 这里我们通过保存步数来确保记录存在，然后从数据库重新加载目标
-            await this.dbHelper.saveTodaySteps(0);
+            // 关键修复：从数据库加载今日已有的步数
+            // 避免二次进入页面时步数重置为0的问题
+            this._todaySteps = await this.dbHelper.getTodaySteps();
             
             console.info(`StepViewModel: Loaded today's data - Steps: ${this._todaySteps}, Goal: ${this._todayGoal}`);
             
@@ -549,6 +740,14 @@ export class StepViewModel {
      */
     async destroy(): Promise<void> {
         await this.stopTracking();
+        
+        // 清除运动提醒定时器
+        if (this.morningReminderTimer !== -1) {
+            clearTimeout(this.morningReminderTimer);
+            this.morningReminderTimer = -1;
+            console.info('StepViewModel: Morning reminder timer cleared');
+        }
+        
         console.info('StepViewModel: Destroyed');
     }
 }

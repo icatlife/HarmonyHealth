@@ -266,6 +266,17 @@ export class StepSensorManager {
     }
 
     /**
+     * 设置初始步数
+     * 用于从数据库加载已有步数后，设置到传感器管理器中
+     * @param initialSteps 初始步数
+     */
+    public setInitialSteps(initialSteps: number): void {
+        this.stepCount = initialSteps;
+        this.lastStepValue = initialSteps;
+        console.info(`StepSensorManager: Initial steps set to ${initialSteps}`);
+    }
+
+    /**
      * 检查是否正在追踪步数
      * @returns boolean 是否正在追踪
      */

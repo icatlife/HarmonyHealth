@@ -8,12 +8,12 @@ export struct CircularProgress {
   /**
    * 当前步数
    */
-  @Prop current: number = 0;
+  @Prop @Watch('onCurrentChanged') current: number = 0;
   
   /**
    * 目标步数
    */
-  @Prop total: number = 10000;
+  @Prop @Watch('onTotalChanged') total: number = 10000;
   
   /**
    * 动画进度值（0-100）
@@ -78,8 +78,8 @@ export struct CircularProgress {
           .fontWeight(FontWeight.Bold)
           .fontColor('#0F172A')
         
-        // 百分比进度
-        Text(`${this.animatedProgress}%`)
+        // 百分比进度（四舍五入到整数）
+        Text(`${Math.round(this.animatedProgress)}%`)
           .fontSize(14)
           .fontColor('#64748B')
       }
@@ -199,10 +199,18 @@ export struct CircularProgress {
   }
   
   /**
-   * 属性变化监听
+   * 监听 current 属性变化
    */
-  aboutToUpdate(): void {
-    // 当 current 或 total 变化时重新启动动画
+  onCurrentChanged(): void {
+    // 当 current 变化时重新启动动画
+    this.startAnimation();
+  }
+  
+  /**
+   * 监听 total 属性变化
+   */
+  onTotalChanged(): void {
+    // 当 total 变化时重新启动动画
     this.startAnimation();
   }
 }

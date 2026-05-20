@@ -169,7 +169,7 @@ export class DatabaseHelper {
     }
 
     /**
-     * 获取最近7天的步数记录
+     * 获取最近7天的步数记录（包括今天）
      * @returns Promise<StepRecord[]> 步数记录数组
      */
     public async getWeekHistory(): Promise<StepRecord[]> {
@@ -181,15 +181,20 @@ export class DatabaseHelper {
         let resultSet: relationalStore.ResultSet | null = null;
 
         try {
-            // 计算7天前的日期
-            const sevenDaysAgo = new Date();
-            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-            const sevenDaysAgoStr = DateUtils.formatDate(sevenDaysAgo);
+            // 获取今天的日期
+            const today = new Date();
+            const todayStr = DateUtils.formatDate(today);
+            
+            // 计算6天前的日期（共7天：今天 + 过去6天）
+            const sixDaysAgo = new Date(today);
+            sixDaysAgo.setDate(today.getDate() - 6);
+            const sixDaysAgoStr = DateUtils.formatDate(sixDaysAgo);
 
             // 使用 RdbPredicates 构造查询条件
             const predicates = new relationalStore.RdbPredicates(Constants.TABLE_STEP_RECORD);
-            predicates.greaterThanOrEqualTo('date', sevenDaysAgoStr);
-            predicates.orderByDesc('date');
+            predicates.greaterThanOrEqualTo('date', sixDaysAgoStr);
+            predicates.lessThanOrEqualTo('date', todayStr);
+            predicates.orderByAsc('date'); // 按日期升序排列，便于后续处理
 
             resultSet = await this.rdbStore.query(predicates, ['id', 'date', 'steps', 'goal']);
 
@@ -203,13 +208,50 @@ export class DatabaseHelper {
                 records.push(new StepRecord(id, date, steps, goal));
             }
 
-            console.info(`Retrieved ${records.length} records for week history`);
+            console.info(`Retrieved ${records.length} records for week history (date range: ${sixDaysAgoStr} to ${todayStr})`);
             return records;
         } catch (error) {
             console.error('Failed to get week history:', JSON.stringify(error));
             throw new Error(`Failed to get week history: ${JSON.stringify(error)}`);
         } finally {
             // 确保关闭游标
+            if (resultSet) {
+                resultSet.close();
+            }
+        }
+    }
+
+    /**
+     * 获取今日步数
+     * @returns Promise<number> 今日步数
+     */
+    public async getTodaySteps(): Promise<number> {
+        if (!this.rdbStore) {
+            throw new Error('Database not initialized. Call initDatabase() first.');
+        }
+
+        const today = DateUtils.formatDate(new Date());
+        let resultSet: relationalStore.ResultSet | null = null;
+
+        try {
+            const predicates = new relationalStore.RdbPredicates(Constants.TABLE_STEP_RECORD);
+            predicates.equalTo('date', today);
+
+            resultSet = await this.rdbStore.query(predicates, ['steps']);
+
+            if (resultSet.goToNextRow()) {
+                const steps = resultSet.getLong(resultSet.getColumnIndex('steps'));
+                console.info(`Today's steps: ${steps}`);
+                return steps;
+            } else {
+                // 如果今日记录不存在，返回0步
+                console.info(`No record for today, returning 0 steps`);
+                return 0;
+            }
+        } catch (error) {
+            console.error('Failed to get today\'s steps:', JSON.stringify(error));
+            throw new Error(`Failed to get today\'s steps: ${JSON.stringify(error)}`);
+        } finally {
             if (resultSet) {
                 resultSet.close();
             }

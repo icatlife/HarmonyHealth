@@ -12,9 +12,17 @@ struct Index {
   @State completionRate: number = 0;
   
   /**
-   * 页面即将显示时的生命周期函数
+   * 页面即将显示时的生命周期函数（首次加载时调用）
    */
   async aboutToAppear() {
+    await this.loadTodayData();
+    this.setTodayDate();
+  }
+  
+  /**
+   * 页面每次显示时的生命周期函数（包括从其他页面返回时）
+   */
+  async onPageShow() {
     await this.loadTodayData();
     this.setTodayDate();
   }
