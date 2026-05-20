@@ -89,22 +89,16 @@ struct Index {
   }
   
   /**
-   * 从数据库获取今日步数（模拟数据）
+   * 从数据库获取今日步数
    */
   private async getTodayStepsFromDatabase(): Promise<number> {
     try {
       const dbHelper = DatabaseHelper.getInstance();
-      const weekHistory = await dbHelper.getWeekHistory();
-      
-      if (weekHistory.length > 0) {
-        return weekHistory[0].steps;
-      }
-      
-      return Math.floor(Math.random() * 8000) + 2000;
-      
+      const todaySteps = await dbHelper.getTodaySteps();
+      return todaySteps;
     } catch (error) {
       console.error('获取今日步数失败:', error);
-      return 3500;
+      return 0;
     }
   }
   

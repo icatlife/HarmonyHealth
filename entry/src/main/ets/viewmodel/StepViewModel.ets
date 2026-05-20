@@ -68,6 +68,11 @@ export class StepViewModel {
     private isTracking: boolean = false;
 
     /**
+     * 是否已暂停计步
+     */
+    private isPaused: boolean = false;
+
+    /**
      * 是否已初始化
      */
     private isInitialized: boolean = false;
@@ -148,6 +153,20 @@ export class StepViewModel {
      */
     public get progressPercent(): number {
         return this._progressPercent;
+    }
+
+    /**
+     * 获取是否正在追踪
+     */
+    public get tracking(): boolean {
+        return this.isTracking;
+    }
+
+    /**
+     * 获取是否已暂停
+     */
+    public get paused(): boolean {
+        return this.isPaused;
     }
 
     /**
@@ -252,6 +271,12 @@ export class StepViewModel {
      */
     async startTracking(): Promise<void> {
         try {
+            // 如果已经暂停，则恢复计步
+            if (this.isPaused) {
+                await this.resumeTracking();
+                return;
+            }
+
             if (this.isTracking) {
                 console.info('StepViewModel: Tracking is already active');
                 return;
@@ -277,6 +302,7 @@ export class StepViewModel {
             
             if (success) {
                 this.isTracking = true;
+                this.isPaused = false;
                 const mode = this.stepSensorManager.isMockModeActive() ? 'Mock' : 'Real';
                 console.info(`StepViewModel: Step tracking started successfully (${mode} mode)`);
                 
@@ -305,6 +331,7 @@ export class StepViewModel {
                 this.stepSensorManager.destroy();
                 this.stepSensorManager = null;
                 this.isTracking = false;
+                this.isPaused = false;
                 console.info('StepViewModel: Step tracking stopped');
                 
                 // 停止后台长时任务
@@ -314,6 +341,66 @@ export class StepViewModel {
             }
         } catch (error) {
             console.error(`StepViewModel: Error stopping tracking. Error: ${JSON.stringify(error)}`);
+        }
+    }
+
+    /**
+     * 暂停步数追踪
+     * 停止传感器追踪但保持当前步数，不释放资源
+     */
+    async pauseTracking(): Promise<void> {
+        try {
+            if (!this.isTracking || this.isPaused) {
+                console.info('StepViewModel: Cannot pause - not tracking or already paused');
+                return;
+            }
+
+            if (this.stepSensorManager) {
+                // 暂停传感器追踪
+                this.stepSensorManager.stopTracking();
+                this.isPaused = true;
+                
+                console.info(`StepViewModel: Step tracking paused - Current steps: ${this._todaySteps}`);
+                
+                // 停止后台长时任务
+                await this.stopBackgroundTask();
+            }
+        } catch (error) {
+            console.error(`StepViewModel: Error pausing tracking. Error: ${JSON.stringify(error)}`);
+        }
+    }
+
+    /**
+     * 恢复步数追踪
+     * 从暂停状态恢复，继续累加步数
+     */
+    async resumeTracking(): Promise<void> {
+        try {
+            if (!this.isPaused) {
+                console.info('StepViewModel: Cannot resume - not in paused state');
+                return;
+            }
+
+            if (this.stepSensorManager) {
+                // 设置当前步数作为初始值，确保从暂停时的步数继续累加
+                this.stepSensorManager.setInitialSteps(this._todaySteps);
+                
+                // 恢复传感器追踪
+                const success = await this.stepSensorManager.startTracking();
+                
+                if (success) {
+                    this.isPaused = false;
+                    const mode = this.stepSensorManager.isMockModeActive() ? 'Mock' : 'Real';
+                    console.info(`StepViewModel: Step tracking resumed successfully (${mode} mode) - Starting from ${this._todaySteps} steps`);
+                    
+                    // 重新申请后台长时任务
+                    await this.startBackgroundTask();
+                } else {
+                    console.error('StepViewModel: Failed to resume step tracking');
+                }
+            }
+        } catch (error) {
+            console.error(`StepViewModel: Error resuming tracking. Error: ${JSON.stringify(error)}`);
         }
     }
 

@@ -97,7 +97,7 @@ export class StepSensorManager {
             if (!pedometerSensor) {
                 console.warn('StepSensorManager: PEDOMETER sensor is not available, falling back to mock mode');
                 this.startMockStepTracking();
-                return false;
+                return true; // 模拟模式也是有效的计步方式
             }
 
             console.info('StepSensorManager: PEDOMETER sensor is available');
@@ -126,7 +126,7 @@ export class StepSensorManager {
             console.warn('StepSensorManager: Falling back to mock mode due to error');
             this.startMockStepTracking();
             
-            return false;
+            return true; // 模拟模式也是有效的计步方式
         }
     }
 
