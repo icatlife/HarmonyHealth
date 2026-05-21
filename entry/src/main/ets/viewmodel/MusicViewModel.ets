@@ -11,8 +11,12 @@ import { BusinessError } from '@kit.BasicServicesKit';
 export type MusicUpdateCallback = () => void;
 
 /**
- * 音乐播放器视图模型
+ * 音乐播放器视图模型（单例模式）
  * 管理播放状态、播放列表、歌词同步等
+ * 
+ * 单例模式说明：
+ * - 使用 getInstance() 获取唯一实例
+ * - 确保后台播放状态在页面切换时保持
  * 
  * 注意：当前使用 setInterval 模拟播放
  * 真机可切换为 AVPlayer 实现真实音频播放
@@ -30,6 +34,21 @@ export type MusicUpdateCallback = () => void;
  * - 通知显示歌曲名、歌手名和播放状态
  */
 export class MusicViewModel {
+  /**
+   * 单例实例
+   */
+  private static instance: MusicViewModel | null = null;
+
+  /**
+   * 获取单例实例
+   */
+  static getInstance(): MusicViewModel {
+    if (!MusicViewModel.instance) {
+      MusicViewModel.instance = new MusicViewModel();
+    }
+    return MusicViewModel.instance;
+  }
+
   /**
    * 当前播放歌曲
    */
@@ -235,6 +254,13 @@ export class MusicViewModel {
    * @param context 应用上下文
    */
   async initAVPlayer(context: common.UIAbilityContext): Promise<void> {
+    // 如果 AVPlayer 已经初始化，跳过
+    if (this.avPlayer) {
+      console.info('MusicViewModel: AVPlayer 已初始化，跳过');
+      this.context = context; // 更新 context
+      return;
+    }
+    
     this.context = context;
     
     try {
@@ -316,6 +342,12 @@ export class MusicViewModel {
    * @param context 应用上下文（用于读取 LRC 歌词文件）
    */
   loadPlaylist(context?: common.UIAbilityContext): void {
+    // 如果播放列表已经加载，跳过
+    if (this._playlist.length > 0) {
+      console.info(`MusicViewModel: 播放列表已加载，共 ${this._playlist.length} 首歌曲，跳过重新加载`);
+      return;
+    }
+    
     this._playlist = MusicDataSource.getLocalSongs(context);
     console.info(`MusicViewModel: 加载播放列表，共 ${this._playlist.length} 首歌曲`);
     

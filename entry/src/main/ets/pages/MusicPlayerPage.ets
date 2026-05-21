@@ -15,9 +15,9 @@ import { common } from '@kit.AbilityKit';
 @Component
 struct MusicPlayerPage {
   /**
-   * 视图模型
+   * 视图模型（单例）
    */
-  private viewModel: MusicViewModel = new MusicViewModel();
+  private viewModel: MusicViewModel = MusicViewModel.getInstance();
   
   /**
    * 当前歌曲
@@ -66,10 +66,12 @@ struct MusicPlayerPage {
       this.updateState();
     });
     
-    // 加载播放列表（传入 context 以解析 LRC 歌词文件）
-    this.viewModel.loadPlaylist(context);
+    // 如果播放列表为空，加载播放列表
+    if (this.viewModel.playlist.length === 0) {
+      this.viewModel.loadPlaylist(context);
+    }
     
-    // 初始化 AVPlayer（用于真实音频播放）
+    // 如果 AVPlayer 未初始化，初始化它
     try {
       await this.viewModel.initAVPlayer(context);
       console.info('MusicPlayerPage: AVPlayer 初始化成功');
@@ -77,8 +79,10 @@ struct MusicPlayerPage {
       console.error('MusicPlayerPage: AVPlayer 初始化失败', error);
     }
     
-    // 初始化状态
+    // 从 ViewModel 同步当前状态到 UI
     this.updateState();
+    
+    console.info(`MusicPlayerPage: 页面初始化 - 当前歌曲: ${this.currentSong?.title ?? '无'}, 播放状态: ${this.isPlaying}`);
   }
   
   /**
