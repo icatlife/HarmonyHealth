@@ -123,11 +123,13 @@ export class DatabaseHelper {
 
     /**
      * 关闭数据库连接
+     * 注意：使用单例模式管理数据库实例，通常不需要手动关闭
+     * 如需释放资源，将实例置为 null 即可
      */
     public async close(): Promise<void> {
         if (this.rdbStore) {
             try {
-                await this.rdbStore.close();
+                // 将实例置为 null，让系统自动管理资源释放
                 this.rdbStore = null;
                 this.context = null;
                 console.info('Database closed successfully');

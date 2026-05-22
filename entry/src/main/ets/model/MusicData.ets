@@ -118,7 +118,7 @@ export class MusicDataSource {
       
       // 将字节数组转换为字符串
       const textDecoder = util.TextDecoder.create('utf-8');
-      const lrcContent = textDecoder.decodeToString(fileContent);
+      const lrcContent: string = textDecoder.decodeWithStream(fileContent);
       
       console.info(`MusicDataSource: LRC 文件读取成功 - ${lrcFileName}，文件大小: ${lrcContent.length} 字符`);
       

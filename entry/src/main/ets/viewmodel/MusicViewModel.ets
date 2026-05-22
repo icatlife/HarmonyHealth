@@ -75,6 +75,16 @@ export class MusicViewModel {
   private _currentLyricIndex: number = 0;
   
   /**
+   * 上次更新歌词索引的时间（用于节流）
+   */
+  private _lastLyricUpdateTime: number = 0;
+  
+  /**
+   * 歌词索引更新的最小间隔（毫秒）
+   */
+  private static readonly LYRIC_UPDATE_INTERVAL: number = 200;
+  
+  /**
    * 播放列表
    */
   private _playlist: Song[] = [];
